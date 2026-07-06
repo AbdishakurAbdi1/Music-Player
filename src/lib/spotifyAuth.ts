@@ -11,6 +11,8 @@ const SCOPES = [
   "user-read-private",
   "user-read-playback-state",
   "user-modify-playback-state",
+  "playlist-read-private",
+  "playlist-read-collaborative",
 ].join(" ");
 
 interface TokenResponse {
@@ -79,6 +81,28 @@ async function exchangeCodeForToken(
 
   if (!response.ok) {
     throw new Error("Kunne ikke hente token fra Spotify");
+  }
+
+  return response.json();
+
+  
+}
+
+export async function refreshAccessToken(
+  refreshToken: string
+): Promise<TokenResponse> {
+  const response = await fetch("https://accounts.spotify.com/api/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: CLIENT_ID,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Kunne ikke fornye token");
   }
 
   return response.json();
