@@ -10,6 +10,7 @@
     "oauth:allow-start",
     "oauth:allow-cancel",
     "shell:allow-open",
-    "shell:allow-open"
+    "shell:allow-open",
+    "store:default"
   ]
 }
