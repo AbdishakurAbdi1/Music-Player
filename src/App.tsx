@@ -15,12 +15,14 @@ import {
   playPlaylist,
   resolveActiveDeviceId,
 } from "./lib/spotifyApi";
-import "./App.css";
 import {
   loadSpotifySDK,
   createPlayer,
   SpotifyPlayerInstance,
 } from "./lib/spotifyPlayer";
+import { NowPlayingTrack } from "./types";
+import Player from "./components/Player";
+import "./App.css";
 
 function App() {
   const [status, setStatus] = useState("Sjekker innloggingsstatus...");
@@ -29,6 +31,12 @@ function App() {
   const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([]);
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [nowPlaying, setNowPlaying] = useState<NowPlayingTrack | null>(null);
+  const [positionMs, setPositionMs] = useState(0);
+  const [volume, setVolume] = useState(0.5);
+
+  const playerInstanceRef = useRef<SpotifyPlayerInstance | null>(null);
+  const playerCreatedRef = useRef(false);
 
   useEffect(() => {
     (async () => {
@@ -61,7 +69,6 @@ function App() {
     })();
   }, []);
 
-  // Hent brukerdata og spillelister når vi har et gyldig token
   useEffect(() => {
     if (!token) return;
 
@@ -85,8 +92,6 @@ function App() {
     })();
   }, [token]);
 
-  const playerCreatedRef = useRef(false);
-
   useEffect(() => {
     if (!token) return;
     if (playerCreatedRef.current) return;
@@ -97,6 +102,7 @@ function App() {
     (async () => {
       await loadSpotifySDK();
       player = createPlayer(() => token.access_token);
+      playerInstanceRef.current = player;
 
       player.addListener("ready", ({ device_id }: { device_id: string }) => {
         console.log("Spiller klar med device ID:", device_id);
@@ -113,6 +119,17 @@ function App() {
       player.addListener("player_state_changed", (state: any) => {
         if (!state) return;
         setIsPlaying(!state.paused);
+        setPositionMs(state.position);
+
+        const current = state.track_window?.current_track;
+        if (current) {
+          setNowPlaying({
+            name: current.name,
+            artists: current.artists.map((a: any) => a.name).join(", "),
+            albumImage: current.album?.images?.[0]?.url ?? null,
+            durationMs: state.duration,
+          });
+        }
       });
 
       player.addListener(
@@ -134,9 +151,20 @@ function App() {
 
     return () => {
       player?.disconnect();
+      playerInstanceRef.current = null;
       playerCreatedRef.current = false;
     };
   }, [token]);
+
+  // Tikker progresjonen lokalt mens en sang spiller, siden SDK-en kun
+  // rapporterer posisjon når noe faktisk endrer seg (ikke kontinuerlig)
+  useEffect(() => {
+    if (!isPlaying || !nowPlaying) return;
+    const interval = setInterval(() => {
+      setPositionMs((p) => Math.min(p + 1000, nowPlaying.durationMs));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isPlaying, nowPlaying]);
 
   async function handleLogin() {
     setStatus("Logger inn...");
@@ -161,11 +189,12 @@ function App() {
     setToken(null);
     setUser(null);
     setPlaylists([]);
+    setNowPlaying(null);
     setStatus("Logget ut");
   }
 
-  async function handlePlayFirstPlaylist() {
-    if (!token || !deviceId || playlists.length === 0) return;
+  async function handlePlayPlaylist(playlist: SpotifyPlaylist) {
+    if (!token || !deviceId) return;
     try {
       const activeDeviceId = await resolveActiveDeviceId(
         token.access_token,
@@ -174,13 +203,35 @@ function App() {
       if (activeDeviceId !== deviceId) setDeviceId(activeDeviceId);
 
       await transferPlayback(token.access_token, activeDeviceId);
-      await new Promise((r) => setTimeout(r, 300)); // liten pause, gir Spotify tid til å bytte enhet
-      await playPlaylist(token.access_token, activeDeviceId, playlists[0].uri);
+      await new Promise((r) => setTimeout(r, 300));
+      await playPlaylist(token.access_token, activeDeviceId, playlist.uri);
     } catch (err) {
       console.error("Avspilling feilet:", err);
       setStatus("Kunne ikke starte avspilling: " + (err as Error).message);
     }
   }
+
+  async function handleTogglePlay() {
+    await playerInstanceRef.current?.togglePlay();
+  }
+
+  async function handleNext() {
+    await playerInstanceRef.current?.nextTrack();
+  }
+
+  async function handlePrev() {
+    await playerInstanceRef.current?.previousTrack();
+  }
+
+  async function handleSeek(ms: number) {
+    await playerInstanceRef.current?.seek(ms);
+    setPositionMs(ms);
+  }
+
+  async function handleVolumeChange(newVolume: number) {
+    setVolume(newVolume);
+    await playerInstanceRef.current?.setVolume(newVolume);
+}
 
   return (
     <main className="container">
@@ -196,31 +247,40 @@ function App() {
       {user && (
         <div style={{ marginTop: "1.5rem" }}>
           <h2>{user.display_name}</h2>
-          <p>{user.email}</p>
           <p>Abonnement: {user.product}</p>
         </div>
       )}
 
+      <Player
+        track={nowPlaying}
+        isPlaying={isPlaying}
+        positionMs={positionMs}
+        volume={volume}
+        onPlayPause={handleTogglePlay}
+        onNext={handleNext}
+        onPrev={handlePrev}
+        onSeek={handleSeek}
+        onVolumeChange={handleVolumeChange}
+      />
+
       {playlists.length > 0 && (
         <div style={{ marginTop: "1.5rem" }}>
           <h3>Dine spillelister</h3>
-          <ul style={{ listStyle: "none", padding: 0 }}>
+          <ul className="playlist-list">
             {playlists
               .filter((playlist) => playlist != null)
               .map((playlist) => (
-                <li key={playlist.id} style={{ marginBottom: "0.5rem" }}>
+                <li
+                  key={playlist.id}
+                  className="playlist-item"
+                  onClick={() => handlePlayPlaylist(playlist)}
+                >
                   {playlist.name ?? "Uten navn"} ({playlist.items?.total ?? 0}{" "}
                   sanger)
                 </li>
               ))}
           </ul>
         </div>
-      )}
-
-      {deviceId && playlists.length > 0 && (
-        <button onClick={handlePlayFirstPlaylist} style={{ marginTop: "1rem" }}>
-          {isPlaying ? "Spiller av..." : `Spill "${playlists[0].name}"`}
-        </button>
       )}
     </main>
   );
