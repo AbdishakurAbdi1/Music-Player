@@ -142,8 +142,10 @@ function App() {
         const current = state.track_window?.current_track;
         if (current) {
           setNowPlaying({
+            id: current.id,
             name: current.name,
             artists: current.artists.map((a: any) => a.name).join(", "),
+            album: current.album?.name ?? "",
             albumImage: current.album?.images?.[0]?.url ?? null,
             durationMs: state.duration,
           });

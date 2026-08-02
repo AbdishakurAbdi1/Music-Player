@@ -1,6 +1,6 @@
 import { SpotifyPlaylist } from "../lib/spotifyApi";
 import { NowPlayingTrack } from "../types";
-import Player from "./Player";
+import SpotifyMusicPlayer from "./SpotifyMusicPlayer";
 
 interface PlayerViewProps {
   playlists: SpotifyPlaylist[];
@@ -50,7 +50,7 @@ export default function PlayerView({
       </aside>
 
       <section className="player-main">
-        <Player {...playerProps} />
+        <SpotifyMusicPlayer {...playerProps} />
       </section>
     </div>
   );

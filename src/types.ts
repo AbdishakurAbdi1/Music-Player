@@ -1,6 +1,8 @@
 export interface NowPlayingTrack {
-    name: string;
-    artists: string;
-    albumImage: string | null;
-    durationMs: number;
+  id: string;
+  name: string;
+  artists: string;
+  album: string;
+  albumImage: string | null;
+  durationMs: number;
 }
