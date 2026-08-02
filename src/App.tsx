@@ -21,8 +21,12 @@ import {
   SpotifyPlayerInstance,
 } from "./lib/spotifyPlayer";
 import { NowPlayingTrack } from "./types";
-import Player from "./components/Player";
+import LoginView from "./components/LoginView";
+import PlaylistSelectView from "./components/PlaylistSelectView";
+import PlayerView from "./components/PlayerView";
 import "./App.css";
+
+type View = "login" | "select" | "player";
 
 function App() {
   const [status, setStatus] = useState("Sjekker innloggingsstatus...");
@@ -34,6 +38,11 @@ function App() {
   const [nowPlaying, setNowPlaying] = useState<NowPlayingTrack | null>(null);
   const [positionMs, setPositionMs] = useState(0);
   const [volume, setVolume] = useState(0.5);
+
+  const [view, setView] = useState<View>("login");
+  const [activePlaylistId, setActivePlaylistId] = useState<string | null>(
+    null
+  );
 
   const playerInstanceRef = useRef<SpotifyPlayerInstance | null>(null);
   const playerCreatedRef = useRef(false);
@@ -68,6 +77,15 @@ function App() {
       }
     })();
   }, []);
+
+  // Bytt view basert på innloggingsstatus
+  useEffect(() => {
+    if (token) {
+      setView((v) => (v === "login" ? "select" : v));
+    } else {
+      setView("login");
+    }
+  }, [token]);
 
   useEffect(() => {
     if (!token) return;
@@ -113,7 +131,7 @@ function App() {
         "not_ready",
         ({ device_id }: { device_id: string }) => {
           console.log("Enhet gikk offline:", device_id);
-        },
+        }
       );
 
       player.addListener("player_state_changed", (state: any) => {
@@ -135,15 +153,17 @@ function App() {
       player.addListener(
         "initialization_error",
         ({ message }: { message: string }) =>
-          console.error("Init-feil:", message),
+          console.error("Init-feil:", message)
       );
       player.addListener(
         "authentication_error",
         ({ message }: { message: string }) =>
-          console.error("Auth-feil:", message),
+          console.error("Auth-feil:", message)
       );
-      player.addListener("account_error", ({ message }: { message: string }) =>
-        console.error("Konto-feil (krever Premium):", message),
+      player.addListener(
+        "account_error",
+        ({ message }: { message: string }) =>
+          console.error("Konto-feil (krever Premium):", message)
       );
 
       await player.connect();
@@ -156,8 +176,6 @@ function App() {
     };
   }, [token]);
 
-  // Tikker progresjonen lokalt mens en sang spiller, siden SDK-en kun
-  // rapporterer posisjon når noe faktisk endrer seg (ikke kontinuerlig)
   useEffect(() => {
     if (!isPlaying || !nowPlaying) return;
     const interval = setInterval(() => {
@@ -190,15 +208,18 @@ function App() {
     setUser(null);
     setPlaylists([]);
     setNowPlaying(null);
+    setActivePlaylistId(null);
     setStatus("Logget ut");
   }
 
-  async function handlePlayPlaylist(playlist: SpotifyPlaylist) {
+  async function handleSelectPlaylist(playlist: SpotifyPlaylist) {
     if (!token || !deviceId) return;
+    setActivePlaylistId(playlist.id);
+    setView("player");
     try {
       const activeDeviceId = await resolveActiveDeviceId(
         token.access_token,
-        deviceId,
+        deviceId
       );
       if (activeDeviceId !== deviceId) setDeviceId(activeDeviceId);
 
@@ -231,58 +252,39 @@ function App() {
   async function handleVolumeChange(newVolume: number) {
     setVolume(newVolume);
     await playerInstanceRef.current?.setVolume(newVolume);
-}
+  }
+
+  if (view === "login") {
+    return <LoginView status={status} onLogin={handleLogin} />;
+  }
+
+  if (view === "select") {
+    return (
+      <PlaylistSelectView
+        user={user}
+        playlists={playlists}
+        onSelect={handleSelectPlaylist}
+        onLogout={handleLogout}
+      />
+    );
+  }
 
   return (
-    <main className="container">
-      <h1>Music Player</h1>
-      <p>{status}</p>
-
-      {token ? (
-        <button onClick={handleLogout}>Logg ut</button>
-      ) : (
-        <button onClick={handleLogin}>Logg inn med Spotify</button>
-      )}
-
-      {user && (
-        <div style={{ marginTop: "1.5rem" }}>
-          <h2>{user.display_name}</h2>
-          <p>Abonnement: {user.product}</p>
-        </div>
-      )}
-
-      <Player
-        track={nowPlaying}
-        isPlaying={isPlaying}
-        positionMs={positionMs}
-        volume={volume}
-        onPlayPause={handleTogglePlay}
-        onNext={handleNext}
-        onPrev={handlePrev}
-        onSeek={handleSeek}
-        onVolumeChange={handleVolumeChange}
-      />
-
-      {playlists.length > 0 && (
-        <div style={{ marginTop: "1.5rem" }}>
-          <h3>Dine spillelister</h3>
-          <ul className="playlist-list">
-            {playlists
-              .filter((playlist) => playlist != null)
-              .map((playlist) => (
-                <li
-                  key={playlist.id}
-                  className="playlist-item"
-                  onClick={() => handlePlayPlaylist(playlist)}
-                >
-                  {playlist.name ?? "Uten navn"} ({playlist.items?.total ?? 0}{" "}
-                  sanger)
-                </li>
-              ))}
-          </ul>
-        </div>
-      )}
-    </main>
+    <PlayerView
+      playlists={playlists}
+      activePlaylistId={activePlaylistId}
+      onSelectPlaylist={handleSelectPlaylist}
+      onBack={() => setView("select")}
+      track={nowPlaying}
+      isPlaying={isPlaying}
+      positionMs={positionMs}
+      volume={volume}
+      onPlayPause={handleTogglePlay}
+      onNext={handleNext}
+      onPrev={handlePrev}
+      onSeek={handleSeek}
+      onVolumeChange={handleVolumeChange}
+    />
   );
 }
 
