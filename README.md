@@ -1,6 +1,6 @@
 # Music Player (in progress)
 
-Dette prosjektet er en desktop-musikkspiller. Jeg var nysgjerrig på hvordan man lager en desktop og mer erfaring med integrering med APIer.
+Dette prosjektet er en desktop-musikkspiller. Jeg var nysgjerrig på hvordan man lager en desktop app og ville ha mer erfaring med integrering av APIer.
 
 ## Hva appen gjør
 
